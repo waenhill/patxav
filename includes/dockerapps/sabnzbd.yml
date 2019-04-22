@@ -1,25 +1,22 @@
 
-#STARTsonarr#
-  sonarr-%USER%:
-    image: linuxserver/sonarr
-    container_name: sonarr-%USER%
+#STARTSabnzbd#
+  sabnzbd-%USER%:
+    container_name: sabnzbd-%USER%
+    image: linuxserver/sabnzbd
     restart: unless-stopped
     labels:
       - traefik.enable=true
       - traefik.frontend.rule=%TRAEFIKURL%
       - traefik.frontend.auth.basic=%VAR%
-      - traefik.port=8989
+      - traefik.port=8080
       - traefik.docker.network=traefik_proxy
     environment:
       - PUID=%UID%
       - PGID=%GID%
       - TZ=%TIMEZONE%
     volumes:
-      - /home/%USER%/docker/sonarr/config:/config
-      - /home/%USER%/docker/rtorrent/torrents:/data/torrents
-      - /home/%USER%/docker/flood/downloads:/downloads
+      - /home/%USER%/docker/sabnzbd/config:/config
       - /home/%USER%/docker/sabnzbd/config/Downloads/complete:/config/Downloads/complete
-      - /home/%USER%/Medias:/tv
     networks:
       - proxy
-#ENDsonarr#
+#ENDSabnzbd#
