@@ -246,10 +246,10 @@ function install_fail2ban() {
 			systemctl restart fail2ban.service > /dev/null 2>&1
 			checking_errors $?
 		else
-			echo -e " ${BWHITE}* Fail2ban non installé !${NC}"	
+			echo -e " ${BWHITE}* Fail2ban non installé !${NC}"
 		fi
 		echo ""
-}	
+}
 
 function install_traefik() {
 	echo -e "${BLUE}### TRAEFIK ###${NC}"
@@ -266,7 +266,9 @@ function install_traefik() {
 		mkdir -p $TRAEFIK
 		touch $TRAEFIKCOMPOSEFILE
 		touch $TRAEFIKTOML
+		cat /opt/seedbox-compose/includes/dockerapps/head.docker > $TRAEFIKCOMPOSEFILE
 		cat "/opt/seedbox-compose/includes/dockerapps/traefik.yml" >> $TRAEFIKCOMPOSEFILE
+		cat /opt/seedbox-compose/includes/dockerapps/foot.docker >> $TRAEFIKCOMPOSEFILE
 		cat "/opt/seedbox-compose/includes/dockerapps/traefik.toml" >> $TRAEFIKTOML
 		sed -i "s|%DOMAIN%|$DOMAIN|g" $TRAEFIKCOMPOSEFILE
 		sed -i "s|%TRAEFIK%|$TRAEFIK|g" $TRAEFIKCOMPOSEFILE
@@ -335,8 +337,8 @@ function install_watchtower() {
 			cat /opt/seedbox-compose/includes/dockerapps/head.docker > $WATCHTOWERCOMPOSEFILE
 			cat "/opt/seedbox-compose/includes/dockerapps/watchtower.yml" >> $WATCHTOWERCOMPOSEFILE
 			cat /opt/seedbox-compose/includes/dockerapps/foot.docker >> $WATCHTOWERCOMPOSEFILE
-			sed -i "s|%DOMAIN%|$DOMAIN|g" $WATCHTOWERCOMPOSEFILE
-			sed -i "s|%PORTAINER%|$PORTAINER|g" $WATCHTOWERCOMPOSEFILE
+			# sed -i "s|%DOMAIN%|$DOMAIN|g" $WATCHTOWERCOMPOSEFILE
+			# sed -i "s|%PORTAINER%|$PORTAINER|g" $WATCHTOWERCOMPOSEFILE
 			cd $WATCHTOWER
 			docker-compose up -d > /dev/null 2>&1
 			checking_errors $?
@@ -512,7 +514,7 @@ function install_cloudplow() {
 	echo -e " ${BWHITE}* Installation cloudplow${NC}"
 	CLOUDPLOWFOLDER="/home/$SEEDUSER/scripts"
 	if [[ ! -d $CLOUDPLOWFOLDER ]]; then
-	mkdir -p $CLOUDPLOWFOLDER
+		mkdir -p $CLOUDPLOWFOLDER
 	fi
 	cd $CLOUDPLOWFOLDER
 	git clone https://github.com/l3uddz/cloudplow > /dev/null 2>&1
@@ -521,15 +523,15 @@ function install_cloudplow() {
 
 	CLOUDPLOWFILE="$CLOUDPLOWFOLDER/cloudplow/config.json.sample"
 	if [[ -e "$CLOUDPLOWFILE" ]]; then
-	mv $CLOUDPLOWFILE $CLOUDPLOWFOLDER/cloudplow/config.json
+		mv $CLOUDPLOWFILE $CLOUDPLOWFOLDER/cloudplow/config.json
 	fi
 
 	## récupération des variables
 	SEEDGROUP=$(cat $GROUPFILE)
 	grep -R "plex" "$INSTALLEDFILE" > /dev/null 2>&1
 	if [[ "$?" == "0" ]]; then
-	docker exec -ti plex-$SEEDUSER grep -E -o "PlexOnlineToken=.{0,22}" /config/Library/Application\ Support/Plex\ Media\ Server/Preferences.xml > /home/$SEEDUSER/token.txt
-	TOKEN=$(grep PlexOnlineToken /home/$SEEDUSER/token.txt | cut -d '=' -f2 | cut -c2-21)
+		docker exec -ti plex-$SEEDUSER grep -E -o "PlexOnlineToken=.{0,22}" /config/Library/Application\ Support/Plex\ Media\ Server/Preferences.xml > /home/$SEEDUSER/token.txt
+		TOKEN=$(grep PlexOnlineToken /home/$SEEDUSER/token.txt | cut -d '=' -f2 | cut -c2-21)
 	fi
 
 	REMOTE=$(grep -iC 2 "token" /root/.config/rclone/rclone.conf | head -n 1 | sed "s/\[//g" | sed "s/\]//g")
@@ -558,11 +560,12 @@ function install_cloudplow() {
 	checking_errors $?
 	grep -R "plex" "$INSTALLEDFILE" > /dev/null 2>&1
 	if [[ "$?" == "0" ]]; then
-	rm /home/$SEEDUSER/token.txt
+		rm /home/$SEEDUSER/token.txt
 	fi
 	echo ""
 }
 
+# Configure Plex auto-scan
 function install_plex_autoscan() {
 	echo -e "${BLUE}### PLEX_AUTOSCAN ###${NC}"
 	echo -e " ${BWHITE}* Installation plex_autoscan${NC}"
@@ -573,6 +576,7 @@ function install_plex_autoscan() {
 	chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER/scripts/plex_autoscan
 	cd /home/$SEEDUSER/scripts/plex_autoscan
 	python -m pip install -r requirements.txt > /dev/null 2>&1
+	checking_errors $?
 
 	## configuration plex_autoscan.service
 	cp "$BASEDIR/includes/config/systemd/plex_autoscan.service" "/etc/systemd/system/plex_autoscan-$SEEDUSER.service" > /dev/null 2>&1
@@ -619,70 +623,28 @@ function define_parameters() {
 }
 
 function create_user() {
-	if [[ ! -f "$GROUPFILE" ]]; then
+	if [[ ! -s "$GROUPFILE" ]]; then
 		touch $GROUPFILE
 		SEEDGROUP=$(whiptail --title "Group" --inputbox \
         	"Création d'un groupe pour la Seedbox" 7 50 3>&1 1>&2 2>&3)
 		echo "$SEEDGROUP" > "$GROUPFILE"
-    		egrep "^$SEEDGROUP" /etc/group >/dev/null
-		if [[ "$?" != "0" ]]; then
-			echo -e " ${BWHITE}* Création du groupe $SEEDGROUP"
-	    	groupadd $SEEDGROUP
-	    	checking_errors $?
-		else
-			SEEDGROUP=$TMPGROUP
-	    	echo -e " ${YELLOW}* Le groupe $SEEDGROUP existe déjà.${NC}"
-		fi
-		if [[ ! -f "$USERSFILE" ]]; then
-			touch $USERSFILE
-		fi
-		SEEDUSER=$(whiptail --title "Administrateur" --inputbox \
-			"Nom d'Administrateur de la Seedbox :" 7 50 3>&1 1>&2 2>&3)
-		PASSWORD=$(whiptail --title "Password" --passwordbox \
-			"Mot de passe :" 7 50 3>&1 1>&2 2>&3)
-		egrep "^$SEEDUSER" /etc/passwd >/dev/null
-		if [ $? -eq 0 ]; then
-			echo -e " ${YELLOW}* L'utilisateur existe déjà !${NC}"
-			USERID=$(id -u $SEEDUSER)
-			GRPID=$(id -g $SEEDUSER)
-			echo -e " ${BWHITE}* Ajout de $SEEDUSER in $SEEDGROUP"
-			usermod -a -G $SEEDGROUP $SEEDUSER
-			checking_errors $?
-		else
-			PASS=$(perl -e 'print crypt($ARGV[0], "password")' $PASSWORD)
-			echo -e " ${BWHITE}* Ajout de $SEEDUSER au système"
-			useradd -M -g $SEEDGROUP -p $PASS -s /bin/bash $SEEDUSER > /dev/null 2>&1
-			mkdir -p /home/$SEEDUSER
-			chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER
-			chmod 755 /home/$SEEDUSER
-			checking_errors $?
-			USERID=$(id -u $SEEDUSER)
-			GRPID=$(id -g $SEEDUSER)
-		fi
-		add_user_htpasswd $SEEDUSER $PASSWORD
-		echo $SEEDUSER >> $USERSFILE
-		return
 	else
-		TMPGROUP=$(cat $GROUPFILE)
-		if [[ "$TMPGROUP" == "" ]]; then
-			SEEDGROUP=$(whiptail --title "Group" --inputbox \
-        		"Création d'un groupe pour la Seedbox" 7 50 3>&1 1>&2 2>&3)
-        	fi
+		SEEDGROUP=$(cat $GROUPFILE)
 	fi
-    	egrep "^$SEEDGROUP" /etc/group >/dev/null
+    egrep "^$SEEDGROUP" /etc/group >/dev/null
 	if [[ "$?" != "0" ]]; then
 		echo -e " ${BWHITE}* Création du groupe $SEEDGROUP"
-	    groupadd $SEEDGROUP
-	    checking_errors $?
+    	groupadd $SEEDGROUP
+    	checking_errors $?
 	else
-		SEEDGROUP=$TMPGROUP
-	    echo -e " ${YELLOW}* Le groupe $SEEDGROUP existe déjà.${NC}"
+		TMPGROUP=$SEEDGROUP
+    	echo -e " ${YELLOW}* Le groupe $SEEDGROUP existe déjà.${NC}"
 	fi
 	if [[ ! -f "$USERSFILE" ]]; then
 		touch $USERSFILE
 	fi
-	SEEDUSER=$(whiptail --title "Utilisateur" --inputbox \
-		"Nom d'utilisateur :" 7 50 3>&1 1>&2 2>&3)
+	SEEDUSER=$(whiptail --title "Administrateur" --inputbox \
+		"Nom d'Administrateur de la Seedbox :" 7 50 3>&1 1>&2 2>&3)
 	PASSWORD=$(whiptail --title "Password" --passwordbox \
 		"Mot de passe :" 7 50 3>&1 1>&2 2>&3)
 	egrep "^$SEEDUSER" /etc/passwd >/dev/null
@@ -721,6 +683,8 @@ function del_ftp () {
 EOC
 }
 
+#Select the services to install based on the list $SERVICESAVAILABLE
+#The user's selection is stored into $SERVICESUSER$SEEDUSER
 function choose_services() {
 	echo -e "${BLUE}### SERVICES ###${NC}"
 	echo -e " ${BWHITE}--> Services en cours d'installation : ${NC}"
@@ -745,7 +709,7 @@ function choose_services() {
 		"Merci de taper votre nom de Domaine :" 7 50 3>&1 1>&2 2>&3)
 	fi
 
-	rm /tmp/menuservices.txt
+	# rm /tmp/menuservices.txt
 }
 
 function choose_media_folder_classique() {
@@ -769,11 +733,11 @@ function choose_media_folder_classique() {
 	done
 	for line in $(cat $MEDIASPERUSER);
 	do
-	line=$(echo $line | sed 's/\(.\)/\U\1/')
-	mkdir -p /home/$SEEDUSER/Medias/$line
-	chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER/Medias
+		line=$(echo $line | sed 's/\(.\)/\U\1/')
+		mkdir -p /home/$SEEDUSER/Medias/$line
+		chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER/Medias
 	done
-	rm /tmp/menumedia.txt
+	# rm /tmp/menumedia.txt
 	echo ""
 }
 
@@ -781,7 +745,7 @@ function choose_media_folder_plexdrive() {
 	echo -e "${BLUE}### DOSSIERS MEDIAS ###${NC}"
 	FOLDER="/mnt/rclone/$SEEDUSER"
 	MEDIASPERUSER="$MEDIASUSER$SEEDUSER"
-	
+
 	# si le dossier /mnt/rclone/user n'est pas vide
 	if [ "$(ls -A /mnt/rclone/$SEEDUSER)" ]; then
 		cd /mnt/rclone/$SEEDUSER
@@ -818,17 +782,19 @@ function choose_media_folder_plexdrive() {
 		done
 		for line in $(cat $MEDIASPERUSER);
 		do
-		line=$(echo $line | sed 's/\(.\)/\U\1/')
-		mkdir -p /home/$SEEDUSER/local/$line
-		mkdir -p /mnt/rclone/$SEEDUSER/$line 
+			line=$(echo $line | sed 's/\(.\)/\U\1/')
+			mkdir -p /home/$SEEDUSER/local/$line
+			mkdir -p /mnt/rclone/$SEEDUSER/$line
 		done
 		chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER/local
 		chmod -R 755 /home/$SEEDUSER/local
-		rm /tmp/menumedia.txt
+		# rm /tmp/menumedia.txt
 	fi
 	echo ""
 }
 
+#Init the variables for the media folders
+#Modifier LE ELSE parce qu'il ne sert a rien.
 function replace_media_compose() {
 	MEDIASPERUSER="$MEDIASUSER$SEEDUSER"
 	if [[ -e "$MEDIASPERUSER" ]]; then
@@ -870,6 +836,7 @@ function add_user_htpasswd() {
 	valid_htpasswd
 }
 
+# Install the selected services and create the related subdomains
 function install_services() {
 	replace_media_compose
 	USERID=$(id -u $SEEDUSER)
@@ -888,7 +855,7 @@ function install_services() {
 	if [[ -f "$PLEXPORTPATH" ]]; then
 		declare -i PORTPLEX=$(cat $PLEXPORTPATH | tail -1)
 	else
-		declare -i PORTPLEX=32400
+		declare -i PORTPLEX=$PLEXPORT
 	fi
 
 	## préparation du docker-compose
@@ -930,7 +897,7 @@ function install_services() {
 		check_domain $ACCESSURL
 		echo "$line-$PORT-$FQDN" >> $INSTALLEDFILE
 		URI="/"
-	
+
 		PORT=$PORT+1
 		PORTPLEX=$PORTPLEX+1
 		FQDN=""
@@ -941,6 +908,7 @@ function install_services() {
 	echo ""
 }
 
+# Run the containers in background mode
 function docker_compose() {
 	echo -e "${BLUE}### DOCKERCOMPOSE ###${NC}"
 	ACTDIR="$PWD"
@@ -954,9 +922,11 @@ function docker_compose() {
 	config_post_compose
 }
 
+# Set-up the configuration for containers
+# Require manual actions
 function config_post_compose() {
-for line in $(cat $SERVICESPERUSER);
-do
+	for line in $(cat $SERVICESPERUSER);
+	do
 		if [[ "$line" == "plex" ]]; then
 			echo -e "${BLUE}### CONFIG POST COMPOSE PLEX ###${NC}"
 			echo -e " ${BWHITE}* Processing plex config file...${NC}"
@@ -1017,10 +987,10 @@ do
 				if [[ "$?" == "0" ]]; then
 					docker exec -t rtorrent-$SEEDUSER sed -i 's/\<unsorted=y\>/& "exec=\/scripts\/plex_autoscan\/plex_autoscan_rutorrent.sh"/' /usr/local/bin/postdl
 				fi
-				
+
 				POSTDL="/home/$SEEDUSER/docker/flood/filebot/postdl"
 				if [[ -e "$POSTDL" ]]; then
-				docker exec -t flood-$SEEDUSER sed -i 's/\<unsorted=y\>/& "exec=\/scripts\/plex_autoscan\/plex_autoscan_flood.sh"/' /usr/local/bin/postdl
+					docker exec -t flood-$SEEDUSER sed -i 's/\<unsorted=y\>/& "exec=\/scripts\/plex_autoscan\/plex_autoscan_flood.sh"/' /usr/local/bin/postdl
 				fi
 			fi
 		fi
@@ -1043,12 +1013,12 @@ do
 			replace_media_compose
 			echo -e "${BLUE}### CONFIG POST COMPOSE FILEBOT RUTORRENT ###${NC}"
 			echo -e " ${BWHITE}* Mise à jour filebot rutorrent...${NC}"
-						
+
 			docker exec -t rtorrent-$SEEDUSER sed -i -e "s/Movies/${FILMS}/g" /usr/local/bin/postdl
 			docker exec -t rtorrent-$SEEDUSER sed -i -e "s/TV/${SERIES}/g" /usr/local/bin/postdl
 			docker exec -t rtorrent-$SEEDUSER sed -i -e "s/Music/${MUSIC}/g" /usr/local/bin/postdl
 			docker exec -t rtorrent-$SEEDUSER sed -i -e "s/Anime/${ANIMES}/g" /usr/local/bin/postdl
-			docker exec -t rtorrent-$SEEDUSER sed -i -e "s/amc.excludes/\/filebot\/amc.excludes/g" /usr/local/bin/postdl			
+			docker exec -t rtorrent-$SEEDUSER sed -i -e "s/amc.excludes/\/filebot\/amc.excludes/g" /usr/local/bin/postdl
 			docker exec -t rtorrent-$SEEDUSER sed -i -e "s/data/mnt/g" /usr/local/bin/postdl
 			docker exec -t rtorrent-$SEEDUSER sed -i '/*)/,/;;/d' /usr/local/bin/postdl
 			checking_errors $?
@@ -1083,11 +1053,11 @@ do
 			FILEBOT_RENAME_SERIES=$(grep FILEBOT_RENAME_SERIES /home/$SEEDUSER/docker-compose.yml | cut -d '=' -f2 | head -n 1)
 			FILEBOT_RENAME_ANIMES=$(grep FILEBOT_RENAME_ANIMES /home/$SEEDUSER/docker-compose.yml | cut -d '=' -f2 | head -n 1)
 
-    			sed -e 's#<FILEBOT_RENAME_MOVIES>#'"$FILEBOT_RENAME_MOVIES"'#' \
-        		    -e 's#<FILEBOT_RENAME_METHOD>#'"$FILEBOT_RENAME_METHOD"'#' \
-        		    -e 's#<FILEBOT_RENAME_MUSICS>#'"$FILEBOT_RENAME_MUSICS"'#' \
-        		    -e 's#<FILEBOT_RENAME_SERIES>#'"$FILEBOT_RENAME_SERIES"'#' \
-        		    -e 's#<FILEBOT_RENAME_ANIMES>#'"$FILEBOT_RENAME_ANIMES"'#' -i /home/$SEEDUSER/docker/flood/filebot/postdl
+				sed -e 's#<FILEBOT_RENAME_MOVIES>#'"$FILEBOT_RENAME_MOVIES"'#' \
+	    		    -e 's#<FILEBOT_RENAME_METHOD>#'"$FILEBOT_RENAME_METHOD"'#' \
+	    		    -e 's#<FILEBOT_RENAME_MUSICS>#'"$FILEBOT_RENAME_MUSICS"'#' \
+	    		    -e 's#<FILEBOT_RENAME_SERIES>#'"$FILEBOT_RENAME_SERIES"'#' \
+	    		    -e 's#<FILEBOT_RENAME_ANIMES>#'"$FILEBOT_RENAME_ANIMES"'#' -i /home/$SEEDUSER/docker/flood/filebot/postdl
 
 			chmod +x /home/$SEEDUSER/docker/flood/filebot/postdl
 			chmod +x /home/$SEEDUSER/docker/flood/filebot/postrm
@@ -1098,7 +1068,7 @@ do
 			sed -i -e "s/Animes/${ANIMES}/g" /home/$SEEDUSER/docker/flood/filebot/postdl
 
 			docker exec -i flood-$SEEDUSER chown -R abc:abc filebot
-			
+
 			grep -R "plex" "$INSTALLEDFILE" > /dev/null 2>&1
 			if [[ "$?" == "0" ]]; then
 				docker exec -t flood-$SEEDUSER sed -i 's/\<unsorted=y\>/& "exec=\/scripts\/plex_autoscan\/plex_autoscan_flood.sh"/' /usr/local/bin/postdl
@@ -1106,7 +1076,7 @@ do
 			checking_errors $?
 			echo ""
 		fi
-done
+	done
 }
 
 decompte() {
@@ -1120,133 +1090,134 @@ decompte() {
     echo -e ""
 }
 
+# Scan the library for Plex
 function plex_sections() {
-			echo -e "${BLUE}### CREATION DES BIBLIOTHEQUES PLEX ###${NC}"
-			replace_media_compose
-			##compteur
-			var="Sections en cours de création, patientez..."
-			decompte 15
+	echo -e "${BLUE}### CREATION DES BIBLIOTHEQUES PLEX ###${NC}"
+	replace_media_compose
+	##compteur
+	var="Sections en cours de création, patientez..."
+	decompte 15
 
-			## création des bibliothèques plex
-			for x in $(cat $MEDIASPERUSER);
-			do
-				if [[ "$x" == "$ANIMES" ]]; then
-					docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $x --type 2 --location /data/$x --lang fr
-					echo -e "	${BWHITE}* $x ${NC}"
-				
-				elif [[ "$x" == "$SERIES" ]]; then
-					docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $x --type 2 --location /data/$x --lang fr
-					echo -e "	${BWHITE}* $x ${NC}"
+	## création des bibliothèques plex
+	for media in $(cat $MEDIASPERUSER);
+	do
+		if [[ "$media" == "$ANIMES" ]]; then
+			docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $media --type 2 --location /data/$media --lang fr
+			echo -e "	${BWHITE}* $media ${NC}"
 
-				elif [[ "$x" == "$EMISSIONS" ]]; then
-					docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $x --type 2 --location /data/$x --lang fr
-					echo -e "	${BWHITE}* $x ${NC}"
-				
-				elif [[ "$x" == "$MUSIC" ]]; then
-					docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $x --type 8 --location /data/$x --lang fr
-					echo -e "	${BWHITE}* $x ${NC}"
-				else
-					docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $x --type 1 --location /data/$x --lang fr
-					echo -e "	${BWHITE}* $x ${NC}"
-				fi
-			done
+		elif [[ "$media" == "$SERIES" ]]; then
+			docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $media --type 2 --location /data/$media --lang fr
+			echo -e "	${BWHITE}* $media ${NC}"
 
-			## configuration plex_autoscan
-			cd /home/$SEEDUSER
-			sed -i '/PATH/d' docker-compose.yml
-			docker-compose rm -fs plex-$SEEDUSER > /dev/null 2>&1 && docker-compose up -d plex-$SEEDUSER > /dev/null 2>&1
-			checking_errors $?
-			echo""
-			##compteur
-			var="Plex est en cours de configuration, patientez..."
-			decompte 15
-			checking_errors $?
-			echo""
-			install_plex_autoscan
-			mv /home/$SEEDUSER/scripts/plex_autoscan/config/config.json.sample /home/$SEEDUSER/scripts/plex_autoscan/config/config.json
-			sed -i 's/\/var\/lib\/plexmediaserver/\/config/g' /home/$SEEDUSER/scripts/plex_autoscan/config/config.json
-			sed -i 's/"DOCKER_NAME": ""/"DOCKER_NAME": "plex-'$SEEDUSER'"/g' /home/$SEEDUSER/scripts/plex_autoscan/config/config.json
-			sed -i 's/"USE_DOCKER": false/"USE_DOCKER": true/g' /home/$SEEDUSER/scripts/plex_autoscan/config/config.json
-			/home/$SEEDUSER/scripts/plex_autoscan/scan.py sections > /dev/null 2>&1
-			/home/$SEEDUSER/scripts/plex_autoscan/scan.py sections > plex.log
+		elif [[ "$media" == "$EMISSIONS" ]]; then
+			docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $media --type 2 --location /data/$media --lang fr
+			echo -e "	${BWHITE}* $media ${NC}"
 
-			## Récupération du token de plex
-			echo -e " ${BWHITE}* Récupération du token Plex${NC}"
-			docker exec -ti plex-$SEEDUSER grep -E -o "PlexOnlineToken=.{0,22}" /config/Library/Application\ Support/Plex\ Media\ Server/Preferences.xml > /home/$SEEDUSER/token.txt
-			TOKEN=$(grep PlexOnlineToken /home/$SEEDUSER/token.txt | cut -d '=' -f2 | cut -c2-21)
-			checking_errors $?
-			for i in `seq 1 50`;
-			do
-   				var=$(grep "$i: " plex.log | cut -d: -f2 | cut -d ' ' -f2-3)
-   				if [ -n "$var" ]
-   				then
-     				echo "$i" "$var"
-   				fi 
-			done > categories.log
-			PLEXCANFILE="/home/$SEEDUSER/scripts/plex_autoscan/config/config.json"
-			cat "$BASEDIR/includes/config/plex_autoscan/config.json" > $PLEXCANFILE
+		elif [[ "$media" == "$MUSIC" ]]; then
+			docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $media --type 8 --location /data/$media --lang fr
+			echo -e "	${BWHITE}* $media ${NC}"
+		else
+			docker exec plex-$SEEDUSER /usr/lib/plexmediaserver/Plex\ Media\ Scanner --add-section $media --type 1 --location /data/$media --lang fr
+			echo -e "	${BWHITE}* $media ${NC}"
+		fi
+	done
 
-			ID_FILMS=$(grep -E 'Films' categories.log | cut -d: -f1 | cut -d ' ' -f1)
-			ID_SERIES=$(grep -E 'Series' categories.log | cut -d: -f1 | cut -d ' ' -f1)
-			ID_ANIMES=$(grep -E 'Animes' categories.log | cut -d: -f1 | cut -d ' ' -f1)
-			ID_MUSIC=$(grep -E 'Musiques' categories.log | cut -d: -f1 | cut -d ' ' -f1)
+	## configuration plex_autoscan
+	cd /home/$SEEDUSER
+	sed -i '/PATH/d' docker-compose.yml
+	docker-compose rm -fs plex-$SEEDUSER > /dev/null 2>&1 && docker-compose up -d plex-$SEEDUSER > /dev/null 2>&1
+	checking_errors $?
+	echo""
+	##compteur
+	var="Plex est en cours de configuration, patientez..."
+	decompte 15
+	checking_errors $?
+	echo""
+	install_plex_autoscan
+	cp /home/$SEEDUSER/scripts/plex_autoscan/config/config.json.sample /home/$SEEDUSER/scripts/plex_autoscan/config/config.json
+	sed -i 's/\/var\/lib\/plexmediaserver/\/config/g' /home/$SEEDUSER/scripts/plex_autoscan/config/config.json
+	sed -i 's/"DOCKER_NAME": ""/"DOCKER_NAME": "plex-'$SEEDUSER'"/g' /home/$SEEDUSER/scripts/plex_autoscan/config/config.json
+	sed -i 's/"USE_DOCKER": false/"USE_DOCKER": true/g' /home/$SEEDUSER/scripts/plex_autoscan/config/config.json
+	/home/$SEEDUSER/scripts/plex_autoscan/scan.py sections > /dev/null 2>&1
+	/home/$SEEDUSER/scripts/plex_autoscan/scan.py sections > plex.log
 
-			if [[ -f "$SCANPORTPATH" ]]; then
-				declare -i PORT=$(cat $SCANPORTPATH | tail -1)
-			else
-				declare -i PORT=3470
+	## Récupération du token de plex
+	echo -e " ${BWHITE}* Récupération du token Plex${NC}"
+	docker exec -ti plex-$SEEDUSER grep -E -o "PlexOnlineToken=.{0,22}" /config/Library/Application\ Support/Plex\ Media\ Server/Preferences.xml > /home/$SEEDUSER/token.txt
+	TOKEN=$(grep PlexOnlineToken /home/$SEEDUSER/token.txt | cut -d '=' -f2 | cut -c2-21)
+	checking_errors $?
+	for i in `seq 1 50`;
+	do
+			var=$(grep "$i: " plex.log | cut -d: -f2 | cut -d ' ' -f2-3)
+			if [ -n "$var" ]
+			then
+				echo "$i" "$var"
 			fi
+	done > categories.log
+	PLEXCANFILE="/home/$SEEDUSER/scripts/plex_autoscan/config/config.json"
+	cat "$BASEDIR/includes/config/plex_autoscan/config.json" > $PLEXCANFILE
 
-			sed -i "s|%TOKEN%|$TOKEN|g" $PLEXCANFILE
-			sed -i "s|%PORT%|$PORT|g" $PLEXCANFILE
-			sed -i "s|%FILMS%|$FILMS|g" $PLEXCANFILE
-			sed -i "s|%SERIES%|$SERIES|g" $PLEXCANFILE
-			sed -i "s|%MUSIC%|$MUSIC|g" $PLEXCANFILE
-			sed -i "s|%ANIMES%|$ANIMES|g" $PLEXCANFILE
-			sed -i "s|%ID_FILMS%|$ID_FILMS|g" $PLEXCANFILE
-			sed -i "s|%ID_SERIES%|$ID_SERIES|g" $PLEXCANFILE
-			sed -i "s|%ID_ANIMES%|$ID_ANIMES|g" $PLEXCANFILE
-			sed -i "s|%ID_MUSIC%|$ID_MUSIC|g" $PLEXCANFILE
-			sed -i "s|%SEEDUSER%|$SEEDUSER|g" $PLEXCANFILE
-			echo ""
+	ID_FILMS=$(grep -E 'Films' categories.log | cut -d: -f1 | cut -d ' ' -f1)
+	ID_SERIES=$(grep -E 'Series' categories.log | cut -d: -f1 | cut -d ' ' -f1)
+	ID_ANIMES=$(grep -E 'Animes' categories.log | cut -d: -f1 | cut -d ' ' -f1)
+	ID_MUSIC=$(grep -E 'Musiques' categories.log | cut -d: -f1 | cut -d ' ' -f1)
 
-			## installation plex_dupefinder
-			install_plex_dupefinder
+	if [[ -f "$SCANPORTPATH" ]]; then
+		declare -i PORT=$(cat $SCANPORTPATH | tail -1)
+	else
+		declare -i PORT=3470
+	fi
 
-			## récupération nom de domaine
-			for line in $(cat $INSTALLEDFILE);
-			do
-				NOMBRE=$(sed -n "/$SEEDUSER/=" $CONFDIR/users)
-				if [ $NOMBRE -le 1 ] ; then
-					ACCESSDOMAIN=$(grep plex $INSTALLEDFILE | cut -d\- -f3)
-				else
-					ACCESSDOMAIN=$(grep plex $INSTALLEDFILE | cut -d\- -f3-4)
-				fi
-			done
-			
-			## intégration des variables
-			PLEXDUPEFILE="/home/$SEEDUSER/scripts/plex_dupefinder/config.json"
-			cat "$BASEDIR/includes/config/plex_dupefinder/config.json" > $PLEXDUPEFILE
-			sed -i "s|%ID_FILMS%|$ID_FILMS|g" $PLEXDUPEFILE
-			sed -i "s|%ID_SERIES%|$ID_SERIES|g" $PLEXDUPEFILE
-			sed -i "s|%FILMS%|$FILMS|g" $PLEXDUPEFILE
-			sed -i "s|%SERIES%|$SERIES|g" $PLEXDUPEFILE
-			sed -i "s|%TOKEN%|$TOKEN|g" $PLEXDUPEFILE
-			sed -i "s|%ACCESSDOMAIN%|$ACCESSDOMAIN|g" $PLEXDUPEFILE
+	sed -i "s|%TOKEN%|$TOKEN|g" $PLEXCANFILE
+	sed -i "s|%PORT%|$PORT|g" $PLEXCANFILE
+	sed -i "s|%FILMS%|$FILMS|g" $PLEXCANFILE
+	sed -i "s|%SERIES%|$SERIES|g" $PLEXCANFILE
+	sed -i "s|%MUSIC%|$MUSIC|g" $PLEXCANFILE
+	sed -i "s|%ANIMES%|$ANIMES|g" $PLEXCANFILE
+	sed -i "s|%ID_FILMS%|$ID_FILMS|g" $PLEXCANFILE
+	sed -i "s|%ID_SERIES%|$ID_SERIES|g" $PLEXCANFILE
+	sed -i "s|%ID_ANIMES%|$ID_ANIMES|g" $PLEXCANFILE
+	sed -i "s|%ID_MUSIC%|$ID_MUSIC|g" $PLEXCANFILE
+	sed -i "s|%SEEDUSER%|$SEEDUSER|g" $PLEXCANFILE
+	echo ""
 
-			## mise en place d'un cron pour le lancement de plexdupefinder
-			(crontab -l | grep . ; echo "*/1 * * * * python3 /home/$SEEDUSER/scripts/plex_dupefinder/plexdupes.py >> /home/$SEEDUSER/scripts/plex_dupefinder/activity.log") | crontab -
-			
-			## lancement plex_autoscan
-			# chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER/scripts/plex_autoscan
-			systemctl start plex_autoscan-$SEEDUSER.service > /dev/null 2>&1
-			checking_errors $?
-			PORT=$PORT+1
-			echo $PORT >> $SCANPORTPATH
-			chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER/scripts
-			rm /home/$SEEDUSER/token.txt
-			echo ""
-			install_cloudplow
+	## installation plex_dupefinder
+	install_plex_dupefinder
+
+	## récupération nom de domaine
+	for line in $(cat $INSTALLEDFILE);
+	do
+		NOMBRE=$(sed -n "/$SEEDUSER/=" $CONFDIR/users)
+		if [ $NOMBRE -le 1 ] ; then
+			ACCESSDOMAIN=$(grep plex $INSTALLEDFILE | cut -d\- -f3)
+		else
+			ACCESSDOMAIN=$(grep plex $INSTALLEDFILE | cut -d\- -f3-4)
+		fi
+	done
+
+	## intégration des variables
+	PLEXDUPEFILE="/home/$SEEDUSER/scripts/plex_dupefinder/config.json"
+	cat "$BASEDIR/includes/config/plex_dupefinder/config.json" > $PLEXDUPEFILE
+	sed -i "s|%ID_FILMS%|$ID_FILMS|g" $PLEXDUPEFILE
+	sed -i "s|%ID_SERIES%|$ID_SERIES|g" $PLEXDUPEFILE
+	sed -i "s|%FILMS%|$FILMS|g" $PLEXDUPEFILE
+	sed -i "s|%SERIES%|$SERIES|g" $PLEXDUPEFILE
+	sed -i "s|%TOKEN%|$TOKEN|g" $PLEXDUPEFILE
+	sed -i "s|%ACCESSDOMAIN%|$ACCESSDOMAIN|g" $PLEXDUPEFILE
+
+	## mise en place d'un cron pour le lancement de plexdupefinder
+	(crontab -l | grep . ; echo "*/1 * * * * python3 /home/$SEEDUSER/scripts/plex_dupefinder/plexdupes.py >> /home/$SEEDUSER/scripts/plex_dupefinder/activity.log") | crontab -
+
+	## lancement plex_autoscan
+	# chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER/scripts/plex_autoscan
+	systemctl start plex_autoscan-$SEEDUSER.service > /dev/null 2>&1
+	checking_errors $?
+	PORT=$PORT+1
+	echo $PORT >> $SCANPORTPATH
+	chown -R $SEEDUSER:$SEEDGROUP /home/$SEEDUSER/scripts
+	rm /home/$SEEDUSER/token.txt
+	echo ""
+	install_cloudplow
 }
 
 function valid_htpasswd() {
@@ -1398,7 +1369,7 @@ function manage_apps() {
 	                "Merci de sélectionner l'Utilisateur" 12 50 3 \
 	                "${TABUSERS[@]}"  3>&1 1>&2 2>&3)
 			[[ "$?" = 1 ]] && script_plexdrive;
-	
+
 	## INFORMATIONS UTILISATEUR
 	USERDOCKERCOMPOSEFILE="/home/$SEEDUSER/docker-compose.yml"
 	USERRESUMEFILE="/home/$SEEDUSER/resume"
@@ -1465,7 +1436,7 @@ function manage_apps() {
 			else
 				script_classique
 			fi
-			;;	
+			;;
 	esac
 }
 

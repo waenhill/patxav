@@ -17,6 +17,7 @@ DATE=`date +%d/%m/%Y-%H:%M:%S`
 IPADDRESS=$(hostname -I | cut -d\  -f1)
 FIRSTPORT="45002"
 LASTPORT="8080"
+PLEXPORT="32400"
 CURRENTDIR="$PWD"
 BASEDIR="/opt/seedbox-compose"
 CONFDIR="/opt/seedbox"

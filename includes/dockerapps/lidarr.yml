@@ -1,5 +1,5 @@
 
-#STARTlidarr#  
+#STARTlidarr# 
   lidarr-%USER%:
     container_name: lidarr-%USER%
     image: linuxserver/lidarr
