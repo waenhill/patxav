@@ -118,6 +118,7 @@ systemctl disable plexdrive > /dev/null 2>&1
 ## Supression services
 rm /etc/systemd/system/plexdrive.service > /dev/null 2>&1
 rm /usr/bin/plexdrive > /dev/null 2>&1
+rm -R /mnt/plexdrive/ > /dev/null 2>&1
 rm /etc/systemd/system/mergerfs.service > /dev/null 2>&1
 rm /etc/systemd/system/rclone.service > /dev/null 2>&1
 
